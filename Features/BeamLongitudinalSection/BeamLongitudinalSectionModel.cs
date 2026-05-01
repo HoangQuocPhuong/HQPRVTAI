@@ -2,7 +2,7 @@ using Autodesk.Revit.DB;
 
 namespace HQPRVTAI.Features.BeamLongitudinalSection;
 
-internal sealed class BeamLongitudinalSectionModel
+public sealed class BeamLongitudinalSectionModel
 {
     private const double ExtraDepthMm = 100.0;
 
@@ -14,7 +14,7 @@ internal sealed class BeamLongitudinalSectionModel
         
         if (axes is null) return null;
 
-        var (right, up, view) = axes.Value;        
+        var (right, up, view) = axes.Value;
 
         var dims   = Measure(beam, beamLine, view, minDepthMm);
 

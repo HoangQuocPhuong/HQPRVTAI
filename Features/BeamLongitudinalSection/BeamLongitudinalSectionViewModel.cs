@@ -1,28 +1,37 @@
+using System.Windows.Input;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using HQPRVTAI.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
-using System.Windows.Input;
+using MediatR;
 
 namespace HQPRVTAI.Features.BeamLongitudinalSection;
 
 public sealed class BeamLongitudinalSectionViewModel : BaseViewModel
 {
-    public ICommand SelectBeamsCommand { get; set; }
-    public ICommand CreateBeamsLongitudinalSectionCommand { get; set; }
+    private readonly IMediator _mediator;
+    private readonly IRevitRepositoryQuery _revitRepositoryQuery;
 
-    public IReadOnlyCollection<FamilyInstance> SelectedBeams { get; set; }
-   
-    private IServiceProvider _service => App.Services;
+    public FamilyInstance? selectedBeam;
 
+    public UIDocument UiDocument { get; set; }
 
-    internal BeamLongitudinalSectionViewModel(UIDocument uiDocument)
+    public ICommand CreateSectionCommand { get; set; }
+
+    public BeamLongitudinalSectionViewModel(IMediator mediator, IRevitRepositoryQuery revitRepositoryQuery)
     {
-        SelectBeamsCommand = new AsyncRelayCommand<IReadOnlyCollection<FamilyInstance>>(
-            execute: async _ => SelectedBeams = _service.GetService<IRevitRepositoryQuery>().PickBeams(uiDocument),
-            canExecute: _ => true
-        );
-    }
-   
+        _mediator = mediator;
+        _revitRepositoryQuery = revitRepositoryQuery;
 
+        CreateSectionCommand = new AsyncRelayCommand<object>(
+           execute: async _ =>
+           {
+               selectedBeam = _revitRepositoryQuery.PickBeam(UiDocument);
+               if (selectedBeam != null)
+               {
+                   await _mediator.Send(new BeamLongitudinalSectionRequest(UiDocument, selectedBeam));
+               }
+           },
+           canExecute: _ => UiDocument != null
+       );
+    } 
 }

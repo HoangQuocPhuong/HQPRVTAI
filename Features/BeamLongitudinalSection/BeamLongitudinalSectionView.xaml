@@ -213,13 +213,9 @@
                     Command="{Binding CancelCommand}"
                     CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"/>
             <Button Style="{StaticResource PrimaryButton}"
-                    Content="Tạo Section"
-                    Command="{Binding ConfirmCommand}"
+                    Content="Create Section"
+                    Command="{Binding CreateSectionCommand}"
                     CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"/>
-            <Button Style="{StaticResource PrimaryButton}"
-        Content="Tạo Section"
-        Command="{Binding SelectBeamsCommand}"
-        CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"/>
         </StackPanel>
 
     </StackPanel>

@@ -28,7 +28,8 @@ internal static class DependencyInjection
     // ── Feature: BeamLongitudinalSection ────────────────────────────────────────
     private static void RegisterFeatureBeamLongitudinalSection(IServiceCollection services)
     {        
-        services.AddSingleton<BeamLongitudinalSectionModel>();
+        services.AddTransient<BeamLongitudinalSectionModel>();
         services.AddTransient<BeamLongitudinalSectionViewModel>();
+        services.AddTransient<BeamLongitudinalSectionView>();
     }
 }

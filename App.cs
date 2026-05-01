@@ -9,8 +9,10 @@ namespace HQPRVTAI
     {
         private const string TabName = "HQPRVTAI";
 
-        private const string PanelName = "Beam Longitudinal Section View";                
-        public static IServiceProvider Services { get; private set; }
+        private const string PanelName1 = "Beam Longitudinal Section View";
+
+        public static IServiceProvider? Services { get; private set; }
+
         public Result OnShutdown(UIControlledApplication application)
         {
             return Result.Succeeded;
@@ -35,7 +37,7 @@ namespace HQPRVTAI
         private static void CreateRibbon(UIControlledApplication application)
         {
             application.CreateRibbonTab(TabName);
-            RibbonPanel panel = application.CreateRibbonPanel(TabName, PanelName);
+            RibbonPanel panel = application.CreateRibbonPanel(TabName, PanelName1);
             string dll = Assembly.GetExecutingAssembly().Location;
 
             panel.AddItem(new PushButtonData(

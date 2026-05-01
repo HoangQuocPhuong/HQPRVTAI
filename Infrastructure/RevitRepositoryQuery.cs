@@ -5,17 +5,18 @@ using Autodesk.Revit.UI.Selection;
 
 namespace HQPRVTAI.Infrastructure
 {
-    internal interface IRevitRepositoryQuery
+    public interface IRevitRepositoryQuery
     {
         IReadOnlyList<FamilyInstance> GetAllBeams(Document doc);
         IReadOnlyList<FamilyInstance>? PickBeams(UIDocument uiDoc);
+        FamilyInstance? PickBeam(UIDocument uiDoc);
         IReadOnlyList<FamilyInstance> GetAllColumns(Document doc);
         IReadOnlyList<FamilyInstance>? PickColumns(UIDocument uiDoc);
-
+        FamilyInstance? PickColumn(UIDocument uiDoc);
         ViewFamilyType? GetSectionViewFamilyType(Document doc);
     }
 
-    internal sealed class RevitRepositoryQuery : IRevitRepositoryQuery
+    public sealed class RevitRepositoryQuery : IRevitRepositoryQuery
     {
         public IReadOnlyList<FamilyInstance> GetAllBeams(Document doc) =>
             new FilteredElementCollector(doc)
@@ -41,6 +42,25 @@ namespace HQPRVTAI.Infrastructure
                     .Select(r => uiDoc.Document.GetElement(r))
                     .Cast<FamilyInstance>()
                     .ToList();
+            }
+            catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+            {
+                return null;
+            }
+        }
+
+        public FamilyInstance? PickBeam(UIDocument uiDoc)
+        {
+            try
+            {
+                var filter = new DelegateSelectionFilter(e => e is FamilyInstance fi &&
+                    fi.Category.Id.Value == (int)BuiltInCategory.OST_StructuralFraming &&
+                    fi.StructuralType == StructuralType.Beam);
+
+                Reference reference = uiDoc.Selection.PickObject(ObjectType.Element, filter);
+
+                var element = uiDoc.Document.GetElement(reference);
+                return element as FamilyInstance;
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException)
             {
@@ -92,6 +112,27 @@ namespace HQPRVTAI.Infrastructure
             }
         }
 
+        public FamilyInstance? PickColumn(UIDocument uiDoc)
+        {
+            try
+            {
+                var filter = new DelegateSelectionFilter(e => e is FamilyInstance fi &&
+                    fi.Category.Id.Value == (int)BuiltInCategory.OST_StructuralFraming &&
+                    fi.StructuralType == StructuralType.Column);
+
+                Reference reference = uiDoc.Selection.PickObject(ObjectType.Element, filter);
+
+                var element = uiDoc.Document.GetElement(reference);
+
+                return element as FamilyInstance;
+            }
+
+            catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+            {
+                return null;
+            }
+        }
+
         public ViewFamilyType? GetSectionViewFamilyType(Document doc) =>
             new FilteredElementCollector(doc)
                 .OfClass(typeof(ViewFamilyType))
@@ -99,9 +140,15 @@ namespace HQPRVTAI.Infrastructure
                 .FirstOrDefault(v => v.ViewFamily == ViewFamily.Section);
     }
 
-    public class DelegateSelectionFilter(Func<Element, bool> allowElement) : ISelectionFilter
+    public class DelegateSelectionFilter : ISelectionFilter
     {
-        public bool AllowElement(Element element) => allowElement(element);
+        private readonly Func<Element, bool> _allowElement;
+        public DelegateSelectionFilter(Func<Element, bool> allowElement)
+        {
+            _allowElement = allowElement ?? throw new ArgumentNullException(nameof(allowElement));
+        }
+
+        public bool AllowElement(Element element) => _allowElement(element);
 
         public bool AllowReference(Reference reference, XYZ position) => true;
     }
