@@ -1,4 +1,5 @@
 ﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using System;
 using System.Windows.Controls;
 
@@ -30,15 +31,23 @@ namespace HQPRVTAI.Infrastructure
                 using var transaction = new Transaction(document, "Create Section View");
                 transaction.Start();
 
-                var viewSection = ViewSection.CreateSection(document, viewFamilyTypeId, boundingBoxXYZ) ?? 
-                    throw new InvalidOperationException("Failed to create section view");
+                var viewSection = ViewSection.CreateSection(document, viewFamilyTypeId, boundingBoxXYZ);
+
+                if (viewSection == null)
+                    throw new InvalidOperationException("Failed to create section view - ViewSection.CreateSection returned null");
+
+                // Verify the view was created and has a valid ID
+                if (viewSection.Id == ElementId.InvalidElementId)
+                    TaskDialog.Show("test","Created section view has invalid element ID");
 
                 transaction.Commit();
+
+                System.Diagnostics.Debug.WriteLine($"Section view created successfully with ID: {viewSection.Id}");
             }
             catch (Exception ex)
             {
                 // Log the exception or handle it appropriately
-                System.Diagnostics.Debug.WriteLine($"Error creating section view: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error creating section view: {ex.Message}\nStackTrace: {ex.StackTrace}");
                 throw;
             }
         }            

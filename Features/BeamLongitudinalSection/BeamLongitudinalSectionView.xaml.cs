@@ -6,8 +6,9 @@ namespace HQPRVTAI.Features.BeamLongitudinalSection;
 
 public partial class BeamLongitudinalSectionView : Window
 {
-    public BeamLongitudinalSectionView()
+    public BeamLongitudinalSectionView(BeamLongitudinalSectionViewModel viewModel)
     {        
-        InitializeComponent();        
+        InitializeComponent();
+        DataContext = viewModel;
     }
 }

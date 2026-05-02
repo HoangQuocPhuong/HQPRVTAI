@@ -29,7 +29,7 @@ internal static class DependencyInjection
     private static void RegisterFeatureBeamLongitudinalSection(IServiceCollection services)
     {        
         services.AddTransient<BeamLongitudinalSectionModel>();
-        services.AddTransient<BeamLongitudinalSectionViewModel>();
+        services.AddSingleton<BeamLongitudinalSectionViewModel>();
         services.AddTransient<BeamLongitudinalSectionView>();
     }
 }

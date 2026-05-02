@@ -2,13 +2,13 @@ using System.Windows.Input;
 
 namespace HQPRVTAI.Infrastructure;
 
-public class AsyncRelayCommand<T> : ICommand
+public class RelayCommand<T> : ICommand
 {
-    private readonly Func<T?,Task> _execute;
+    private readonly Action<T?> _execute;
     private readonly Func<T?, bool>? _canExecute;
     private bool _isExecuting;
 
-    public AsyncRelayCommand(Func<T?, Task> execute, Func<T?, bool>? canExecute = null)
+    public RelayCommand(Action<T?> execute, Func<T?, bool>? canExecute = null)
     {
         _execute = execute ?? throw new ArgumentNullException(nameof(execute));
         _canExecute = canExecute;
@@ -29,7 +29,7 @@ public class AsyncRelayCommand<T> : ICommand
         return _canExecute?.Invoke(default) ?? true;
     }
 
-    public async void Execute(object? parameter)
+    public void Execute(object? parameter)
     {
         if (!CanExecute(parameter))
             return;
@@ -41,11 +41,11 @@ public class AsyncRelayCommand<T> : ICommand
         {
             if (parameter is T typedParameter)
             {
-                await _execute(typedParameter);
+                _execute(typedParameter);
             }
             else
             {
-                await _execute(default);
+                _execute(default);
             }
         }
         finally
@@ -54,7 +54,6 @@ public class AsyncRelayCommand<T> : ICommand
             RaiseCanExecuteChanged();
         }
     }
-
 
     public void RaiseCanExecuteChanged()
     {
