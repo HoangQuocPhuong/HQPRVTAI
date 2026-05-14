@@ -1,14 +1,14 @@
-using Autodesk.Revit.UI;
 using System.Windows;
-using System.Windows.Interop;
 
 namespace HQPRVTAI.Features.BeamLongitudinalSection;
 
 public partial class BeamLongitudinalSectionView : Window
 {
+    private BeamLongitudinalSectionViewModel _viewModel;
     public BeamLongitudinalSectionView(BeamLongitudinalSectionViewModel viewModel)
-    {        
+    {
         InitializeComponent();
-        DataContext = viewModel;
+        _viewModel = viewModel;
+        DataContext = _viewModel;
     }
 }

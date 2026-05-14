@@ -57,9 +57,10 @@ namespace HQPRVTAI.Infrastructure
                     fi.Category.Id.Value == (int)BuiltInCategory.OST_StructuralFraming &&
                     fi.StructuralType == StructuralType.Beam);
 
-                Reference reference = uiDoc.Selection.PickObject(ObjectType.Element, filter);
+                Reference reference = uiDoc.Selection.PickObject(ObjectType.Element, filter,"Select beam");
 
                 var element = uiDoc.Document.GetElement(reference);
+
                 return element as FamilyInstance;
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException)
@@ -69,6 +70,13 @@ namespace HQPRVTAI.Infrastructure
         }
 
         public IReadOnlyList<FamilyInstance> GetAllColumns(Document doc) =>
+            new FilteredElementCollector(doc)
+                .OfClass(typeof(FamilyInstance))
+                .OfCategory(BuiltInCategory.OST_StructuralColumns)
+                .Cast<FamilyInstance>()
+                .Where(fi => fi.StructuralType == StructuralType.Column)
+                .ToList();
+        public IReadOnlyList<FamilyInstance> GetIntersectingColumns(Document doc, FamilyInstance beam) =>
             new FilteredElementCollector(doc)
                 .OfClass(typeof(FamilyInstance))
                 .OfCategory(BuiltInCategory.OST_StructuralColumns)

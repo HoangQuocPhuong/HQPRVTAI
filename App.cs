@@ -2,6 +2,7 @@ using Autodesk.Revit.UI;
 using System.Reflection;
 using HQPRVTAI.Infrastructure;
 using HQPRVTAI.Features.BeamLongitudinalSection;
+using HQPRVTAI.Features.AddDimension;
 
 namespace HQPRVTAI
 {
@@ -10,6 +11,7 @@ namespace HQPRVTAI
         private const string TabName = "HQPRVTAI";
 
         private const string PanelName1 = "Beam Longitudinal Section View";
+        private const string PanelName2 = "Add Dimension";
 
         public static IServiceProvider? Services { get; private set; }
 
@@ -41,10 +43,20 @@ namespace HQPRVTAI
             string dll = Assembly.GetExecutingAssembly().Location;
 
             panel.AddItem(new PushButtonData(
-                name: nameof(BeamLongitudinalSectionCommand),
+                name: nameof(BeamLongitudinalSectionShow),
                 text: "Beam\nLongitudinal Section",
                 assemblyName: dll,
-                className: typeof(BeamLongitudinalSectionCommand).FullName!)
+                className: typeof(BeamLongitudinalSectionShow).FullName!)
+            {
+                ToolTip = "Tạo section view dọc theo dầm đã chọn.",
+                LongDescription = "Chọn dầm → nhấn nút → điều chỉnh thông số trong dialog → xác nhận."
+            });
+
+            panel.AddItem(new PushButtonData(
+                name: nameof(AddDimensionShow),
+                text: "Add\nDimension",
+                assemblyName: dll,
+                className: typeof(AddDimensionShow).FullName!)
             {
                 ToolTip = "Tạo section view dọc theo dầm đã chọn.",
                 LongDescription = "Chọn dầm → nhấn nút → điều chỉnh thông số trong dialog → xác nhận."

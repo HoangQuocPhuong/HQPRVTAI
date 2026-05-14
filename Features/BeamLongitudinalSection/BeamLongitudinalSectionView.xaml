@@ -214,7 +214,7 @@
                     CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"/>
             <Button Style="{StaticResource PrimaryButton}"
                     Content="Create Section"
-                    Command="{Binding CreateSectionCommand}"
+                    Command="{Binding RunCommand}"
                     CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"/>
         </StackPanel>
 

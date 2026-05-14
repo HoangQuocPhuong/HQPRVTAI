@@ -1,7 +1,5 @@
 ﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using System;
-using System.Windows.Controls;
 
 namespace HQPRVTAI.Infrastructure
 {
@@ -14,6 +12,7 @@ namespace HQPRVTAI.Infrastructure
     {        
         public void CreateSectionView(Document document, ElementId viewFamilyTypeId, BoundingBoxXYZ boundingBoxXYZ)
         {
+            TaskDialog.Show("test", "Created section view has invalid element ID");
             try
             {
                 // Validate inputs
@@ -29,7 +28,10 @@ namespace HQPRVTAI.Infrastructure
                     throw new ArgumentException("Bounding box must have valid height (Min.Z < Max.Z)", nameof(boundingBoxXYZ));
 
                 using var transaction = new Transaction(document, "Create Section View");
-                transaction.Start();
+                var status = transaction.Start();
+                
+                if (status != TransactionStatus.Started)
+                    TaskDialog.Show("test", $"Failed to start transaction. Status: {status}");
 
                 var viewSection = ViewSection.CreateSection(document, viewFamilyTypeId, boundingBoxXYZ);
 
@@ -40,7 +42,10 @@ namespace HQPRVTAI.Infrastructure
                 if (viewSection.Id == ElementId.InvalidElementId)
                     TaskDialog.Show("test","Created section view has invalid element ID");
 
-                transaction.Commit();
+                var commitStatus = transaction.Commit();
+
+                if (commitStatus != TransactionStatus.Committed)
+                    TaskDialog.Show("test", $"Failed to commit transaction. Status: {commitStatus}");
 
                 System.Diagnostics.Debug.WriteLine($"Section view created successfully with ID: {viewSection.Id}");
             }

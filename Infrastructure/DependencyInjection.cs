@@ -1,4 +1,5 @@
 ﻿using HQPRVTAI.Features.BeamLongitudinalSection;
+using HQPRVTAI.Features.AddDimension;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 
@@ -12,6 +13,7 @@ internal static class DependencyInjection
 
         RegisterInfrastructure(services);
         RegisterFeatureBeamLongitudinalSection(services);
+        RegisterFeatureAddDimension(services);
         // RegisterFeatureXxx(services); ← thêm feature mới tại đây
 
         return services.BuildServiceProvider();
@@ -19,17 +21,25 @@ internal static class DependencyInjection
 
     // ── Infrastructure ────────────────────────────────────────────────────
     private static void RegisterInfrastructure(IServiceCollection services)
-    {
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
+    {        
         services.AddSingleton<IRevitRepositoryQuery, RevitRepositoryQuery>();
         services.AddSingleton<IRevitRepositoryCommand, RevitRepositoryCommand>();
     }
 
     // ── Feature: BeamLongitudinalSection ────────────────────────────────────────
     private static void RegisterFeatureBeamLongitudinalSection(IServiceCollection services)
-    {        
+    {       
+        services.AddSingleton<BeamLongitudinalSectionService>();
         services.AddTransient<BeamLongitudinalSectionModel>();
-        services.AddSingleton<BeamLongitudinalSectionViewModel>();
+        services.AddTransient<BeamLongitudinalSectionViewModel>();
         services.AddTransient<BeamLongitudinalSectionView>();
+    }
+
+    // ── Feature: AddDimension ────────────────────────────────────────
+    private static void RegisterFeatureAddDimension(IServiceCollection services)
+    {
+        services.AddSingleton<AddDimensionService>();
+        services.AddTransient<AddDimensionViewModel>();
+        services.AddTransient<AddDimensionView>();
     }
 }
