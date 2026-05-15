@@ -1,7 +1,6 @@
 ﻿using HQPRVTAI.Features.BeamLongitudinalSection;
 using HQPRVTAI.Features.AddDimension;
 using Microsoft.Extensions.DependencyInjection;
-using System.Reflection;
 
 namespace HQPRVTAI.Infrastructure;
 
@@ -23,7 +22,6 @@ internal static class DependencyInjection
     private static void RegisterInfrastructure(IServiceCollection services)
     {        
         services.AddSingleton<IRevitRepositoryQuery, RevitRepositoryQuery>();
-        services.AddSingleton<IRevitRepositoryCommand, RevitRepositoryCommand>();
     }
 
     // ── Feature: BeamLongitudinalSection ────────────────────────────────────────

@@ -1,15 +1,19 @@
-using Autodesk.Revit.UI;
 using Autodesk.Revit.DB;
-using Autodesk.Revit.UI.Selection;
+using Autodesk.Revit.UI;
+using HQPRVTAI.Infrastructure;
 
 namespace HQPRVTAI.Features.AddDimension;
 
 public class AddDimensionService : IExternalEventHandler
 {
-    private ExternalEvent _event;
+    private const double ParallelFaceTolerance = 0.95;
 
-    public AddDimensionService()
+    private readonly ExternalEvent _event;
+    private readonly IRevitRepositoryQuery _revitRepositoryQuery;
+
+    public AddDimensionService(IRevitRepositoryQuery revitRepositoryQuery)
     {
+        _revitRepositoryQuery = revitRepositoryQuery;
         _event = ExternalEvent.Create(this);
     }
 
@@ -22,92 +26,64 @@ public class AddDimensionService : IExternalEventHandler
     {
         var uidoc = app.ActiveUIDocument;
         var doc = uidoc.Document;
-        var view = uidoc.ActiveView;
 
         try
         {
-            // Check if active view is valid for dimensioning
-            if (view == null || view.IsTemplate)
+            var beam = _revitRepositoryQuery.PickBeam(uidoc);
+            if (beam == null) return;
+
+            if (beam.Location is not LocationCurve beamLoc || beamLoc.Curve is not Line beamLine)
             {
-                TaskDialog.Show("Error", "Active view is not valid for adding dimensions.");
+                TaskDialog.Show("Error", "Beam location is not a line");
                 return;
             }
 
-            // Pick first reference (face or edge)
-            Reference ref1 = uidoc.Selection.PickObject(
-                ObjectType.Face,
-                "Pick first face for dimension");
+            XYZ beamStart = beamLine.GetEndPoint(0);
+            XYZ beamEnd = beamLine.GetEndPoint(1);
+            XYZ beamDir = (beamEnd - beamStart).Normalize();
 
-            if (ref1 == null) return;
-
-            // Pick second reference (face or edge)
-            Reference ref2 = uidoc.Selection.PickObject(
-                ObjectType.Face,
-                "Pick second face for dimension");
-
-            if (ref2 == null) return;
-
-            // Get geometry for dimension placement
-            var geom1 = GetReferenceGeometry(doc, ref1);
-            var geom2 = GetReferenceGeometry(doc, ref2);
-
-            if (geom1 == null || geom2 == null)
+            var intersectingColumns = _revitRepositoryQuery.GetIntersectingColumns(doc, beam);
+            if (intersectingColumns.Count < 2)
             {
-                TaskDialog.Show("Error", "Could not get geometry from selected references.");
+                TaskDialog.Show("Info", "At least two columns must intersect with the beam");
                 return;
             }
 
-            // Create dimension line between the two points
-            var dimensionLine = Line.CreateBound(geom1, geom2);
+            var sectionView = GetActiveSectionView(doc);
+            if (sectionView == null)
+            {
+                TaskDialog.Show("Error", "Active view must be a non-template section view");
+                return;
+            }
 
-            using var t = new Transaction(doc, "Add Aligned Dimension");
-            t.Start();
+            var columnReferences = GetColumnDimensionReferences(intersectingColumns, beamDir, beamStart);
+
+            using var transaction = new Transaction(doc, "Add Beam Dimension");
+            transaction.Start();
 
             try
             {
-                // Create reference array for dimension
-                ReferenceArray refArray = new ReferenceArray();
-                refArray.Append(ref1);
-                refArray.Append(ref2);
+                int dimensionCount = CreateDimensionsBetweenColumns(doc, sectionView, columnReferences);
 
-                // The Revit API in 2026 may have different method names
-                // We'll attempt the most common pattern
-                // If this fails, check the Revit API documentation for your version
-                var creator = doc.Create;
-                Dimension dimension = null;
-
-                // Try the standard aligned dimension method
-                var method = creator.GetType().GetMethod("NewAlignedDimension", 
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-
-                if (method != null)
+                if (dimensionCount == 0)
                 {
-                    dimension = (Dimension)method.Invoke(creator, new object[] { view, dimensionLine, refArray });
-                }
-                else
-                {
-                    throw new InvalidOperationException(
-                        "NewAlignedDimension method not found in Revit API. " +
-                        "Check the Revit 2026 documentation for the correct method name.");
+                    transaction.RollBack();
+                    TaskDialog.Show("Info", "No valid column faces found for dimensions");
+                    return;
                 }
 
-                if (dimension == null)
-                {
-                    throw new Exception("Dimension creation returned null");
-                }
-
-                t.Commit();
-                TaskDialog.Show("Success", "Dimension added successfully.");
+                transaction.Commit();
+                TaskDialog.Show("Success", $"Added {dimensionCount} dimensions");
             }
             catch (Exception ex)
             {
-                t.RollBack();
-                TaskDialog.Show("Error", $"Failed to create dimension: {ex.Message}");
+                transaction.RollBack();
+                TaskDialog.Show("Error", $"Failed to create dimensions: {ex.Message}");
             }
         }
         catch (Autodesk.Revit.Exceptions.OperationCanceledException)
         {
-            // User cancelled - ignore
+            // User cancelled.
         }
         catch (Exception ex)
         {
@@ -117,39 +93,159 @@ public class AddDimensionService : IExternalEventHandler
 
     public string GetName() => "Add Aligned Dimension";
 
-    /// <summary>
-    /// Extract a reference point from the selected reference (face or edge).
-    /// </summary>
-    private XYZ? GetReferenceGeometry(Document doc, Reference reference)
+    private static ViewSection? GetActiveSectionView(Document doc)
     {
-        try
+        return doc.ActiveView is ViewSection sectionView && !sectionView.IsTemplate
+            ? sectionView
+            : null;
+    }
+
+    private static ColumnDimensionReferences?[] GetColumnDimensionReferences(
+        IReadOnlyList<FamilyInstance> columns,
+        XYZ beamDir,
+        XYZ beamStart)
+    {
+        var options = new Options
         {
-            Element elem = doc.GetElement(reference);
-            GeometryObject geoObj = elem.GetGeometryObjectFromReference(reference);
+            ComputeReferences = true,
+            IncludeNonVisibleObjects = false,
+            DetailLevel = ViewDetailLevel.Medium
+        };
 
-            if (geoObj is Face face)
-            {
-                // Get center point of face
-                BoundingBoxUV bbox = face.GetBoundingBox();
-                UV center = new UV((bbox.Min.U + bbox.Max.U) / 2, (bbox.Min.V + bbox.Max.V) / 2);
-                return face.Evaluate(center);
-            }
-            else if (geoObj is Edge edge)
-            {
-                // Get midpoint of edge
-                Curve curve = edge.AsCurve();
-                return curve.Evaluate(0.5, true);
-            }
-
-            return null;
+        var result = new ColumnDimensionReferences?[columns.Count];
+        for (int i = 0; i < columns.Count; i++)
+        {
+            result[i] = TryGetColumnDimensionReferences(columns[i], options, beamDir, beamStart);
         }
-        catch
+
+        return result;
+    }
+
+    private static int CreateDimensionsBetweenColumns(
+        Document doc,
+        ViewSection view,
+        IReadOnlyList<ColumnDimensionReferences?> columns)
+    {
+        int dimensionCount = 0;
+        double shortCurveTolerance = doc.Application.ShortCurveTolerance;
+
+        for (int i = 0; i < columns.Count - 1; i++)
         {
-            return null;
+            var left = columns[i];
+            var right = columns[i + 1];
+
+            if (left == null || right == null)
+                continue;
+
+            if (left.EndPoint.DistanceTo(right.StartPoint) <= shortCurveTolerance)
+                continue;
+
+            var dimensionLine = Line.CreateBound(left.EndPoint, right.StartPoint);
+
+            var refArray = new ReferenceArray();
+            refArray.Append(left.EndReference);
+            refArray.Append(right.StartReference);
+
+            try
+            {
+                if (doc.Create.NewDimension(view, dimensionLine, refArray) != null)
+                    dimensionCount++;
+            }
+            catch
+            {
+                // Keep processing remaining column pairs when one pair cannot be dimensioned.
+            }
+        }
+
+        return dimensionCount;
+    }
+
+    private static ColumnDimensionReferences? TryGetColumnDimensionReferences(
+        FamilyInstance column,
+        Options options,
+        XYZ beamDir,
+        XYZ beamStart)
+    {
+        ColumnFaceReference? start = null;
+        ColumnFaceReference? end = null;
+
+        foreach (var solid in GetSolids(column.get_Geometry(options)))
+        {
+            foreach (Face face in solid.Faces)
+            {
+                CaptureDimensionFace(face, beamDir, beamStart, ref start, ref end);
+            }
+        }
+
+        return start == null || end == null
+            ? null
+            : new ColumnDimensionReferences(start.Reference, start.Point, end.Reference, end.Point);
+    }
+
+    private static void CaptureDimensionFace(
+        Face face,
+        XYZ beamDir,
+        XYZ beamStart,
+        ref ColumnFaceReference? start,
+        ref ColumnFaceReference? end)
+    {
+        Reference? reference = face.Reference;
+        if (reference == null)
+            return;
+
+        XYZ normal = face.ComputeNormal(new UV(0.5, 0.5));
+        if (Math.Abs(normal.DotProduct(beamDir)) < ParallelFaceTolerance)
+            return;
+
+        XYZ point = GetFaceCenter(face);
+        double projection = (point - beamStart).DotProduct(beamDir);
+        var candidate = new ColumnFaceReference(reference, point, projection);
+
+        if (start == null || projection < start.Projection)
+            start = candidate;
+
+        if (end == null || projection > end.Projection)
+            end = candidate;
+    }
+
+    private static XYZ GetFaceCenter(Face face)
+    {
+        BoundingBoxUV bbox = face.GetBoundingBox();
+        var center = new UV(
+            (bbox.Min.U + bbox.Max.U) / 2,
+            (bbox.Min.V + bbox.Max.V) / 2);
+
+        return face.Evaluate(center);
+    }
+
+    private static IEnumerable<Solid> GetSolids(GeometryElement? geometry)
+    {
+        if (geometry == null)
+            yield break;
+
+        foreach (GeometryObject geometryObject in geometry)
+        {
+            if (geometryObject is Solid solid && solid.Faces.Size > 0)
+            {
+                yield return solid;
+                continue;
+            }
+
+            if (geometryObject is GeometryInstance geometryInstance)
+            {
+                foreach (var nestedSolid in GetSolids(geometryInstance.GetInstanceGeometry()))
+                {
+                    yield return nestedSolid;
+                }
+            }
         }
     }
+
+    private sealed record ColumnFaceReference(Reference Reference, XYZ Point, double Projection);
+
+    private sealed record ColumnDimensionReferences(
+        Reference StartReference,
+        XYZ StartPoint,
+        Reference EndReference,
+        XYZ EndPoint);
 }
-
-
-
-

@@ -13,15 +13,19 @@ namespace HQPRVTAI.Infrastructure
         IReadOnlyList<FamilyInstance> GetAllColumns(Document doc);
         IReadOnlyList<FamilyInstance>? PickColumns(UIDocument uiDoc);
         FamilyInstance? PickColumn(UIDocument uiDoc);
+        IReadOnlyList<FamilyInstance> GetIntersectingColumns(Document doc, FamilyInstance beam);
         ViewFamilyType? GetSectionViewFamilyType(Document doc);
     }
 
     public sealed class RevitRepositoryQuery : IRevitRepositoryQuery
     {
+        private const double BoundingBoxTolerance = 1.0 / 304.8; // 1 mm, Revit internal feet.
+
         public IReadOnlyList<FamilyInstance> GetAllBeams(Document doc) =>
             new FilteredElementCollector(doc)
                 .OfClass(typeof(FamilyInstance))
                 .OfCategory(BuiltInCategory.OST_StructuralFraming)
+                .WhereElementIsNotElementType()
                 .Cast<FamilyInstance>()
                 .Where(fi => fi.StructuralType == StructuralType.Beam)
                 .ToList();
@@ -73,16 +77,69 @@ namespace HQPRVTAI.Infrastructure
             new FilteredElementCollector(doc)
                 .OfClass(typeof(FamilyInstance))
                 .OfCategory(BuiltInCategory.OST_StructuralColumns)
+                .WhereElementIsNotElementType()
                 .Cast<FamilyInstance>()
                 .Where(fi => fi.StructuralType == StructuralType.Column)
                 .ToList();
-        public IReadOnlyList<FamilyInstance> GetIntersectingColumns(Document doc, FamilyInstance beam) =>
-            new FilteredElementCollector(doc)
+        public IReadOnlyList<FamilyInstance> GetIntersectingColumns(Document doc, FamilyInstance beam)
+        {
+            if (beam.Location is not LocationCurve beamLoc || beamLoc.Curve is not Line beamLine)
+                return Array.Empty<FamilyInstance>();
+
+            BoundingBoxXYZ? beamBox = beam.get_BoundingBox(null);
+            if (beamBox == null)
+                return Array.Empty<FamilyInstance>();
+
+            XYZ beamStart = beamLine.GetEndPoint(0);
+            XYZ beamEnd = beamLine.GetEndPoint(1);
+            XYZ beamDir = (beamEnd - beamStart).Normalize();
+            double beamLength = beamLine.Length;
+
+            var outline = new Outline(
+                new XYZ(
+                    beamBox.Min.X - BoundingBoxTolerance,
+                    beamBox.Min.Y - BoundingBoxTolerance,
+                    beamBox.Min.Z - BoundingBoxTolerance),
+                new XYZ(
+                    beamBox.Max.X + BoundingBoxTolerance,
+                    beamBox.Max.Y + BoundingBoxTolerance,
+                    beamBox.Max.Z + BoundingBoxTolerance));
+
+            var candidates = new FilteredElementCollector(doc)
                 .OfClass(typeof(FamilyInstance))
                 .OfCategory(BuiltInCategory.OST_StructuralColumns)
-                .Cast<FamilyInstance>()
-                .Where(fi => fi.StructuralType == StructuralType.Column)
-                .ToList();
+                .WhereElementIsNotElementType()
+                .WherePasses(new BoundingBoxIntersectsFilter(outline));
+
+            var intersectingColumns = new List<(FamilyInstance Column, double Projection)>();
+            foreach (FamilyInstance column in candidates)
+            {
+                if (column.StructuralType != StructuralType.Column)
+                    continue;
+
+                if (column.Location is LocationPoint colLoc)
+                {
+                    XYZ colPoint = colLoc.Point;
+                    XYZ vecToCol = colPoint - beamStart;
+                    double projection = vecToCol.DotProduct(beamDir);
+
+                    if (projection >= 0 && projection <= beamLength)
+                    {
+                        intersectingColumns.Add((column, projection));
+                    }
+                }
+            }
+
+            intersectingColumns.Sort((left, right) => left.Projection.CompareTo(right.Projection));
+
+            var result = new List<FamilyInstance>(intersectingColumns.Count);
+            foreach (var item in intersectingColumns)
+            {
+                result.Add(item.Column);
+            }
+
+            return result;
+        }
 
         public IReadOnlyList<string> GetAllViewNames(Document doc) =>
             new FilteredElementCollector(doc)
@@ -125,7 +182,7 @@ namespace HQPRVTAI.Infrastructure
             try
             {
                 var filter = new DelegateSelectionFilter(e => e is FamilyInstance fi &&
-                    fi.Category.Id.Value == (int)BuiltInCategory.OST_StructuralFraming &&
+                    fi.Category.Id.Value == (int)BuiltInCategory.OST_StructuralColumns &&
                     fi.StructuralType == StructuralType.Column);
 
                 Reference reference = uiDoc.Selection.PickObject(ObjectType.Element, filter);

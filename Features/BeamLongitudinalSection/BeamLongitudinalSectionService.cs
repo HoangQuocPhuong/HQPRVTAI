@@ -1,14 +1,13 @@
 ﻿using Autodesk.Revit.UI;
 using Autodesk.Revit.DB;
-using Autodesk.Revit.UI.Selection;
 using HQPRVTAI.Infrastructure;
 
 namespace HQPRVTAI.Features.BeamLongitudinalSection;
 
 public class BeamLongitudinalSectionService : IExternalEventHandler
 {
-    private ExternalEvent _event;
-    private IRevitRepositoryQuery _revitRepositoryQuery;
+    private readonly ExternalEvent _event;
+    private readonly IRevitRepositoryQuery _revitRepositoryQuery;
 
     public BeamLongitudinalSectionService(IRevitRepositoryQuery revitRepositoryQuery)
     {
@@ -28,24 +27,19 @@ public class BeamLongitudinalSectionService : IExternalEventHandler
 
         try
         {
-            // 1. Pick beam
-            var beam = _revitRepositoryQuery.PickBeam(uidoc);   
+            var beam = _revitRepositoryQuery.PickBeam(uidoc);
+            if (beam == null) return;
 
             ElementId typeId = beam.GetTypeId();
 
-            Element typeElem = doc.GetElement(typeId);
+            Element? typeElem = doc.GetElement(typeId);
 
             double b = GetParamValue(typeElem, "b");
 
             double h = GetParamValue(typeElem, "h");
 
-            if (beam == null) return;
-
-            var curve = (beam.Location as LocationCurve)?.Curve;
-            if (curve == null) return;
-
-            var line = curve as Line;
-            if (line == null) return;
+            if (beam.Location is not LocationCurve { Curve: Line line })
+                return;
 
             var direction = (line.GetEndPoint(1) - line.GetEndPoint(0)).Normalize();
             var midpoint = line.Evaluate(0.5, true);
@@ -60,21 +54,21 @@ public class BeamLongitudinalSectionService : IExternalEventHandler
             transform.BasisY = up;
             transform.BasisZ = viewDir;
 
-            // Bounding box cho section
+            double offset = 1000 / 304.8;
+            double halfLength = line.Length / 2;
+
             var box = new BoundingBoxXYZ
             {
                 Transform = transform,
-                Min = new XYZ(- line.Length / 2  - 1000 / 304.8, - h - 1000 / 304.8, 0),
-                Max = new XYZ(line.Length / 2 + 1000 / 304.8, 1000 / 304.8, b / 2)
+                Min = new XYZ(-halfLength - offset, -h - offset, 0),
+                Max = new XYZ(halfLength + offset, offset, b / 2)
             };
+
+            var viewType = _revitRepositoryQuery.GetSectionViewFamilyType(doc);
+            if (viewType == null) return;
 
             using var t = new Transaction(doc, "Create Beam Section");
             t.Start();
-
-            var viewType = new FilteredElementCollector(doc)
-                .OfClass(typeof(ViewFamilyType))
-                .Cast<ViewFamilyType>()
-                .First(x => x.ViewFamily == ViewFamily.Section);
 
             ViewSection.CreateSection(doc, viewType.Id, box);
 
@@ -82,15 +76,18 @@ public class BeamLongitudinalSectionService : IExternalEventHandler
         }
         catch
         {
-            // user cancel → ignore
+            // User cancelled.
         }
     }
 
     public string GetName() => "Create Beam Section";
 
-    private double GetParamValue(Element elem, string paramName)
+    private static double GetParamValue(Element? elem, string paramName)
     {
-        Parameter param = elem.LookupParameter(paramName);
+        if (elem == null)
+            return 0;
+
+        Parameter? param = elem.LookupParameter(paramName);
         if (param != null && param.StorageType == StorageType.Double)
         {
             return param.AsDouble();
